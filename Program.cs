@@ -11,7 +11,8 @@ using Telegram.Bot.Types.ReplyMarkups;
 const string version = "1.1.6c";
 const string updateLog = $"\n" +
     $"更新日志：\n" +
-    $"修复了 - 未审核数量超30报告的数据不准确";
+    $"修复了 - 未审核数量超30报告的数据不准确" + 
+    $"修复了 - 初次运行不生成配置文件";
 const string about = $"音乐投稿机器人 by @AkizonChan - {version} {updateLog}";
 
 

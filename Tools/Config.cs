@@ -1,5 +1,6 @@
 ﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Otaku16.Tools
@@ -47,9 +48,13 @@ namespace Otaku16.Tools
                     Socks5 = "socks5://127.0.0.1:12612",
                     Telegram = new ()
                     {
-                        Token = "YOUR_BOT_TOKEN_HERE"
+                        Token = "YOUR_BOT_TOKEN_HERE",
+                        ChannelID = 0,
+                        GroupID = 0,
+                        ChannelLink = "",
                     },
-                    Admins = { 1977354088 }
+                    Owner = 1977354088,
+                    Admins = new List<long>()
                 };
                 //解析成json
                 var jo = JObject.FromObject(_instance);

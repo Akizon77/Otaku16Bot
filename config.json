@@ -1,0 +1,13 @@
+{
+  "debug": false,
+  "proxy": false,
+  "socks5": "socks5://127.0.0.1:12612",
+  "telegram": {
+    "token": "YOUR_BOT_TOKEN_HERE",
+    "channel": 0,
+    "group": 0,
+    "channel_link": ""
+  },
+  "owner": 1977354088,
+  "admins": []
+}
