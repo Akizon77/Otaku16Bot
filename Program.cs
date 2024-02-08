@@ -8,11 +8,9 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 
-const string version = "1.1.6c";
+const string version = "<code>1.1.6c</code>";
 const string updateLog = $"\n" +
-    $"更新日志：\n" +
-    $"修复了 - 未审核数量超30报告的数据不准确" + 
-    $"修复了 - 初次运行不生成配置文件";
+    $"1.1.6 更新日志：\r\n- 修复了未审核数量超过30时报告的数据不准确的问题。\r\n- 修复了初次运行时不生成配置文件的问题。\r\n- 添加了投稿审核后的删除按钮。\r\n- 修改了重新排列链接投稿的按钮。\r\n- 添加了使用 <code>/list</code> 命令获取所有未审核稿件的功能。\r\n- 修复了在群组内会再次触发投稿事件的问题。\r\n- 修改了匿名按钮样式";
 const string about = $"音乐投稿机器人 by @AkizonChan - {version} {updateLog}";
 
 
@@ -31,6 +29,7 @@ var me = await bot.GetMeAsync();
 using CancellationTokenSource cts = new();
 AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
 {
+    Debugger.Break();
     log.Panic(e.ExceptionObject);
 };
 ReceiverOptions receiverOptions = new()
@@ -215,7 +214,7 @@ async Task HandleCommand(Update update)
                 InlineKeyboardButton.WithUrl("反馈","https://github.com/Akizon77/Otaku16Bot/issues/new"),
             }
         });
-        await bot.SendTextMessageAsync(chatid, about, replyMarkup: inline);
+        await bot.SendTextMessageAsync(chatid, about, replyMarkup: inline,parseMode:ParseMode.Html);
         return;
     }
     if (content.StartsWith("/list"))
@@ -615,8 +614,8 @@ async Task AskToFillInfo(Update update)
         {
             new[]
             {
-                InlineKeyboardButton.WithCallbackData("×匿名","anonymous/true"),
-                InlineKeyboardButton.WithCallbackData("√保留来源","anonymous/false")
+                InlineKeyboardButton.WithCallbackData("❌匿名","anonymous/true"),
+                InlineKeyboardButton.WithCallbackData("✅保留来源","anonymous/false")
             }
         });
     }
