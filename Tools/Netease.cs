@@ -7,6 +7,7 @@ namespace Otaku16.Tools
     {
         public static int GetIdFromUrl(string url)
         {
+            if (!url.Contains("https://music.163.com/song")) return 0;
             Uri uri = new Uri(url);
             string query = uri.Query;
             System.Collections.Specialized.NameValueCollection queryParameters =
