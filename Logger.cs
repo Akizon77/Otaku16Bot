@@ -1,7 +1,8 @@
 ﻿using System.Diagnostics;
+using Otaku16.Service;
 using Telegram.Bot.Types;
 
-namespace Otaku16.Tools
+namespace Otaku16
 {
     public class Logger
     {
@@ -71,7 +72,7 @@ namespace Otaku16.Tools
                 Console.WriteLine(stack);
                 Environment.Exit(-1);
             }
-                
+
         }
 
         /// <summary>
@@ -107,7 +108,7 @@ namespace Otaku16.Tools
         /// <param name="v">日志内容</param>
         public void Debug(params object?[] v)
         {
-            if (!Config.GetConfig().Debug) return;
+            //if (!Config.GetConfig().Debug) return;
             Log("DEBUG", v);
         }
 
@@ -123,7 +124,7 @@ namespace Otaku16.Tools
         {
             if (update.CallbackQuery is { } query)
             {
-                Debug($"收到 {query.From.Username??query.From.Id.ToString()} 的回调: {query.Data}");
+                Debug($"收到 {query.From.Username ?? query.From.Id.ToString()} 的回调: {query.Data}");
             }
             else if (update.Message is { } message)
             {
@@ -148,7 +149,7 @@ namespace Otaku16.Tools
             {
                 Warn("未知消息");
             }
-           
+
         }
     }
 }

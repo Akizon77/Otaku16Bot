@@ -1,48 +1,45 @@
 ﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Otaku16.Data;
 using System.Diagnostics.CodeAnalysis;
 using System.Xml.Linq;
 
-namespace Otaku16.Tools
+namespace Otaku16.Service
 {
     public class History
     {
-        private static bool Loaded = false;
-        [AllowNull]
-        private static History _instance;
-        public static History GetHistory()
+        public Dictionary<long, HistoryTable> Data;
+        public History()
         {
-            if (Loaded) return _instance;
             if (!File.Exists("./his.json"))
             {
                 //初始数据
-                _instance = new History()
-                {
-                    His = new()
-                };
+                Data = new();
                 //解析成json
-                var jo = JObject.FromObject(_instance);
+                var jo = JObject.FromObject(Data);
                 var content = jo.ToString();
                 //写入文件
                 File.WriteAllText("./his.json", content);
-                return _instance;
             }
-            var str = File.ReadAllText("./his.json");
-            var jobj = JObject.Parse(str);
-            _instance = jobj.ToObject<History>();
-            return _instance ?? throw new NullReferenceException("处理历史记录文件出错");
+            else
+            {
+                var str = File.ReadAllText("./his.json");
+                var jobj = JObject.Parse(str);
+                Data = jobj.ToObject<Dictionary<long, HistoryTable>>() ?? throw new ArgumentNullException("历史文件错误");
+            }
+           
         }
         //保存
         public void Save()
         {
-            var jo = JObject.FromObject(this);
+            var jo = JObject.FromObject(Data);
             var content = jo.ToString();
             //写入文件
             File.WriteAllText("./his.json", content);
         }
         public long GetIDByMessageID(int msgId)
         {
-            foreach (var kvp in His)
+            foreach (var kvp in Data)
             {
                 if (kvp.Value.GroupMessageID == msgId) return kvp.Key;
             }
@@ -52,14 +49,12 @@ namespace Otaku16.Tools
         public List<HistoryTable> GetAllUnaduitPosts()
         {
             var list = new List<HistoryTable>();
-            foreach (var kvp in His)
+            foreach (var kvp in Data)
             {
                 if (kvp.Value.Passed is null) list.Add(kvp.Value);
             }
             return list;
         }
-        [JsonProperty("history")]
-        public Dictionary<long, HistoryTable> His = new();
     }
     public struct HistoryTable
     {
