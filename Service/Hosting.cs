@@ -16,6 +16,7 @@ namespace Otaku16.Service
 
             }).ConfigureServices((c,s) =>
             {
+                s.AddHostedService<ApplicationHostService>();
                 s.AddSingleton<Config>();
                 s.AddSingleton<Bot>();
                 s.AddSingleton<Cache>();
@@ -30,6 +31,14 @@ namespace Otaku16.Service
         public static void Start()
         {
             _host.Start();
+        }
+        public static void Stop()
+        {
+            _host.StopAsync();
+        }
+        public static void WaitForStop()
+        {
+            _host.WaitForShutdown();
         }
     }
 }

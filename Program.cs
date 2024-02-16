@@ -9,7 +9,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Otaku16.Data;
 using Telegram.Bot.Types.ReplyMarkups;
-
+using Microsoft.Extensions.Hosting;
 
 Logger log = new("Main");
 AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
@@ -19,26 +19,26 @@ AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
 };
 log.Info("正在启动服务");
 Hosting.Start();
-Hosting.GetService<Handler>();
 
-//记录发送的消息
+log.Info("Done! 输入 stop 或发送 Ctrl+C 终止程序");
 
-log.Info("Done! 输入stop终止程序");
-
-while (true)
+#pragma warning disable CS4014 // 由于此调用不会等待，因此在调用完成前将继续执行当前方法
+Task.Run(() =>
 {
-    var input = Console.ReadLine();
-    if (input == "stop")
+    while (true)
     {
-        break;
+        var input = Console.ReadLine();
+        if (input == "stop")
+        {
+            break;
+        }
+        else
+        {
+            log.Info("未知指令: ", input);
+        }
     }
-    else
-    {
-        log.Info("未知指令: ", input);
-    }
-}
+    Hosting.Stop();
+});
+#pragma warning restore CS4014 
+Hosting.WaitForStop();
 log.Info("Stopping");
-
-
-
-

@@ -1,7 +1,6 @@
 ﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using System.ComponentModel.DataAnnotations;
-using System.Diagnostics.CodeAnalysis;
+
 
 namespace Otaku16.Service
 {
@@ -27,7 +26,7 @@ namespace Otaku16.Service
         }
         public void Save()
         {
-            var jo = JObject.FromObject(this);
+            var jo = JObject.FromObject(data);
             var content = jo.ToString();
             //写入文件
             File.WriteAllText("./config.json", content);
@@ -61,8 +60,10 @@ namespace Otaku16.Service
             else
             {
                 var str = File.ReadAllText("./config.json");
+                Console.WriteLine($"DEBUG {str}");
                 var jobj = JObject.Parse(str);
-                data = jobj.ToObject<Data>();
+                var d = jobj.ToObject<Data>();
+                data = d;
             }
         }
         //结构
