@@ -278,7 +278,10 @@ namespace Otaku16
                     case "edit/performer":
                         post.Author = null;
                         break;
-
+                    case "edit/album/null":
+                        post.Album = "单曲";
+                        await Bot.EditMessageTextAsync(query.From.Id,query.Message.MessageId,"该曲目是单曲，无专辑");
+                        break;
                     default:
                         log.Warn(post.UserName, "非法回调参数", data);
                         break;
@@ -325,6 +328,13 @@ namespace Otaku16
                 catch (Exception) { }
                 await AskToFillInfo(update);
                 return;
+            }
+            if (data.StartsWith("del"))
+            {
+                if (data == "del/btn")
+                {
+                    await Bot.EditMessageReplyMarkupAsync(query.Message.Chat.Id, query.Message.MessageId);
+                }
             }
             if (data.StartsWith("aduit"))
             {
@@ -440,6 +450,14 @@ namespace Otaku16
                     text += $"{(post.Author is null ? "" : "\n艺术家: " + post.Author)}";
                     text += $"{(post.Album is null ? "" : "\n专辑: " + post.Album)}";
                 }
+                else if (update.Message.Text.StartsWith("https://i.y.qq.com"))
+                {
+                    post = QQMusic.AutoFill(post, update.Message.Text);
+                    text += $"\n当前是QQ音乐分享链接";
+                    text += $"{(post.Title is null ? "" : "\n标题: " + post.Title)}";
+                    text += $"{(post.Author is null ? "" : "\n艺术家: " + post.Author)}";
+                    text += $"{(post.Album is null ? "" : "\n专辑: " + post.Album)}";
+                }
                 cache.Data[user.Id] = post;
                 cache.Save();
                 await Bot.SendTextMessageAsync(
@@ -550,7 +568,16 @@ namespace Otaku16
                     text += $"\n艺术家名: `{audio.Performer}` ";
                     buttons.Add(InlineKeyboardButton.WithCallbackData("修改艺术家名", "edit/performer"));
                 }
-                InlineKeyboardMarkup inline = new(new[] { buttons.ToArray() });
+                InlineKeyboardMarkup inline;
+                if (buttons.Count == 0) 
+                {
+                     inline = new(new[] { buttons.ToArray() });
+                }
+                else
+                {
+                    inline = new(new[] { buttons.ToArray(), new[] { InlineKeyboardButton.WithCallbackData("❌删除按钮", "del/btn") } });
+                }
+                
                 text += $"\n随时可使用 /stop 终止投稿";
                 //发送稿件基本信息
                 await Bot.SendTextMessageAsync(
@@ -602,8 +629,18 @@ namespace Otaku16
                 text = "请补充歌曲标题";
             else if (post.Author is null)
                 text = "请补充艺术家名";
-            else if (post.Album is null)
-                text = "请补充专辑，如无专辑请回复单曲";
+            else if (post.Album is null) 
+            { 
+                text = "请补充专辑";
+                inline = new InlineKeyboardMarkup(new[]
+                {
+                    new[]
+                    {
+                        InlineKeyboardButton.WithCallbackData("此曲目是单曲","edit/album/null")
+
+                    }
+                });
+            }
             else if (post.Tag is null)
             {
                 if (config.IsOwner((msg?.From?.Id)??0))

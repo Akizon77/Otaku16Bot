@@ -7,7 +7,7 @@ namespace Otaku16.Tools
     {
         public static int GetIdFromUrl(string url)
         {
-            if (!url.Contains("https://music.163.com/song")) return 0;
+            if (!url.StartsWith("https://music.163.com/song")) return 0;
             Uri uri = new Uri(url);
             string query = uri.Query;
             System.Collections.Specialized.NameValueCollection queryParameters =
@@ -26,14 +26,36 @@ namespace Otaku16.Tools
             HttpClient client = new HttpClient();
             var s = await client.GetAsync($"http://music.163.com/api/song/detail/?id={id}&ids=%5B{id}%5D");
             var jo = JObject.Parse(s.Content.ReadAsStringAsync().Result);
+#pragma warning disable CS8602 // 解引用可能出现空引用。
             try
             {
                 post.Title = jo["songs"][0]["name"].ToString();
+                try
+                {
+                    if (jo["songs"][0]["transName"] != null)
+                        post.Title += $"({jo["songs"][0]["transName"]})";
+                }
+                catch { }
+                
             }
             catch { }
             try
             {
-                post.Author = jo["songs"][0]["artists"][0]["name"]?.ToString();
+                string singer = "";
+                var list = jo["songs"][0]["artists"].ToList();
+                foreach (var item in list)
+                {
+                    singer += item["name"].ToString() + "、";
+                }
+                if (singer == "")
+                    post.Author = null;
+                else if (singer.Length > 1)
+                {
+                    singer = singer[..(singer.Length - 1)];
+                    post.Author = singer;
+                }
+                else
+                    post.Author = null;
             }
             catch { }
             try
@@ -41,6 +63,7 @@ namespace Otaku16.Tools
                 post.Album = jo["songs"][0]["album"]["name"]?.ToString();
             }
             catch { }
+#pragma warning restore CS8602 // 解引用可能出现空引用。
             return post;
         }
     }

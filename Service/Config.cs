@@ -60,7 +60,6 @@ namespace Otaku16.Service
             else
             {
                 var str = File.ReadAllText("./config.json");
-                Console.WriteLine($"DEBUG {str}");
                 var jobj = JObject.Parse(str);
                 var d = jobj.ToObject<Data>();
                 data = d;

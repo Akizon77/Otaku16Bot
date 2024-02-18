@@ -8,9 +8,9 @@ namespace Otaku16
 {
     public static class Const
     {
-        public static string version = "1.1.7b";
+        public static string version = "1.1.8";
         public static string updateLog = $"\n" +
-            $"1.1.7 更新日志：\r\n\r\n- 新增 网易云链接自动识别歌曲信息\r\n- <code>/about</code> 添加 完整更新日志按钮\r\n- 链接投稿时使用音频文件通过稿件时移除审核框\r\n- 大幅修改代码模式（可能有新的特性）\r\n- 修复了重复回复音频文件导致稿件可以一直被通过的问题\r\n- 对Owner新增投稿类型：每日推荐\r\n- 修复所有链接都会被识别网易云的问题\r\n- 按钮交互逻辑优化\r\n- 修复了无法获取用户名的bug\r\n\r\n" +
+            $"1.1.8 更新日志：\r\n\r\n- 新增 QQ音乐 自动识别歌曲信息\r\n- 文件投稿可以删除“修改标题”等按钮\r\n- 新增按钮，如曲目是单曲可直接点击按钮\r\n- 修复了网易云链接识别艺术家时多位艺术家只自动填充一位作曲家的问题" +
             $"";
         public static string about = $"音乐投稿机器人 by @AkizonChan - <code>{version}</code> {updateLog}";
     }
