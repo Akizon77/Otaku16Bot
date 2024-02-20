@@ -7,7 +7,7 @@ namespace Otaku16.Tools
     {
         public static int GetIdFromUrl(string url)
         {
-            if (!url.StartsWith("https://music.163.com/song")) return 0;
+            if (!url.Contains("music.163.com")) return 0;
             Uri uri = new Uri(url);
             string query = uri.Query;
             System.Collections.Specialized.NameValueCollection queryParameters =
@@ -33,7 +33,8 @@ namespace Otaku16.Tools
                 try
                 {
                     if (jo["songs"][0]["transName"] != null)
-                        post.Title += $"({jo["songs"][0]["transName"]})";
+                        if (jo["songs"][0]["transName"].ToString() != "")
+                            post.Title += $"({jo["songs"][0]["transName"]})";
                 }
                 catch { }
                 
