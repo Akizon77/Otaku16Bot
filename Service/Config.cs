@@ -91,6 +91,8 @@ namespace Otaku16.Service
             public long GroupID;
             [JsonProperty("channel_link")]
             public string ChannelLink;
+            [JsonProperty("group_link")]
+            public string GroupLink;
         }
 
     }
