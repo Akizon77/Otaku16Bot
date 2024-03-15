@@ -1,4 +1,5 @@
-﻿using Otaku16.Service;
+﻿using Otaku16.Repos;
+using Otaku16.Service;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,33 +11,27 @@ namespace Otaku16.Commands
 {
     public class List
     {
-        private static History history => Hosting.GetService<History>();
-        private static Config config => Hosting.GetService<Config>();
-        public static string GetFirstTen()
-        {
-            var posts = history.GetAllUnaduitPosts();
-            string text = "";
-            int i = 1;
-            posts.ForEach(x =>
-            {
-                if (i < 11)
-                {
-                    text += $"<a href=\"{config.data.Telegram.GroupLink}/{x.GroupMessageID}\">{i}.{x.Post.Title}</a>\n";
-                    i++;
-                }
-            });
-            return text;
-        }
+        private static Options Opt => Hosting.GetService<Options>();
+        private static PostRepo Posts => Hosting.GetService<PostRepo>();
+        
+                /// <summary>
+        /// 获取指定页面的帖子链接文本
+        /// </summary>
+        /// <param name="page">要获取的页面编号</param>
+        /// <returns>返回一个字符串，包含该页面指定范围内的帖子链接</returns>
         public static string GetPage(int page)
         {
-            var posts = history.GetAllUnaduitPosts();
+            // 从数据库中查询所有未通过审核的帖子
+            var posts = Posts.Queryable().Where(x => x.Passed == null).ToList();
             string text = "";
             int i = 1;
+            // 遍历所有帖子，将属于指定页面范围的帖子链接添加到文本中
             posts.ForEach(x =>
             {
                 if (page * 10 < i && i <= (page + 1) * 10)
                 {
-                    text += $"<a href=\"{config.data.Telegram.GroupLink}/{x.GroupMessageID}\">{i}.{x.Post.Title}</a>\n";
+                    // 如果帖子在指定的页面范围内，将其链接以特定格式添加到文本中
+                    text += $"<a href=\"{Opt.Telegram.GroupLink}/{x.GroupMessageID}\">{i}.{x.Title}</a>\n";
                 }
                 i++;
             });

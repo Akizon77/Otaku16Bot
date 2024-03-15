@@ -14,13 +14,10 @@ namespace Otaku16.Service
         {
             await Task.CompletedTask;
             _serviceProvider.GetRequiredService<Handler>();
-            
         }
 
         public async Task StopAsync(CancellationToken cancellationToken)
         {
-            _serviceProvider.GetRequiredService<Config>().Save();
-            _serviceProvider.GetRequiredService<History>().Save();
             _serviceProvider.GetRequiredService<Cache>().Save();
             await Task.CompletedTask;
         }

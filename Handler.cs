@@ -1,4 +1,5 @@
-﻿using Otaku16.Data;
+﻿using Otaku16.Model;
+using Otaku16.Repos;
 using Otaku16.Service;
 using Otaku16.Tools;
 using System.Diagnostics;
@@ -15,17 +16,20 @@ namespace Otaku16
     {
         private Logger log = new("Bot");
         private TelegramBotClient Bot;
-        private User Me;
-        private Config config;
-        private History history;
+        private Telegram.Bot.Types.User Me;
+        private Options Opt;
         private Cache cache;
+        private PostRepo Posts;
+        private UserRepo Users;
 
-        public Handler(Bot bot, Config config, Cache cache, History history)
+        public Handler(Bot bot, Options option, Cache cache, Options opt, PostRepo postRepo, UserRepo userRepo)
         {
             Bot = bot.bot; Me = bot.Me;
-            this.config = config;
-            this.history = history;
+            this.Opt = option;
             this.cache = cache;
+            this.Opt = opt;
+            this.Posts = postRepo;
+            this.Users = userRepo;
             using CancellationTokenSource cts = new();
 
             ReceiverOptions receiverOptions = new()
@@ -47,26 +51,31 @@ namespace Otaku16
 
         private ValueTask OnSendReq(ITelegramBotClient botClient, Telegram.Bot.Args.ApiRequestEventArgs args, CancellationToken cancellationToken = default)
         {
-            if (args.Request is Telegram.Bot.Requests.SendMessageRequest smq)
+            Task.Run(() =>
             {
-                log.Info($"发送 {smq.ChatId}：", smq.Text);
-            }
-            else if (args.Request is Telegram.Bot.Requests.SendAudioRequest saq)
-            {
-                log.Info($"发送 {saq.ChatId}：[Audio] {saq.Caption}");
-            }
-            else if (args.Request is Telegram.Bot.Requests.EditMessageTextRequest emtr)
-            {
-                log.Info($"修改消息 {emtr.Text}");
-            }
-            else if (args.Request is Telegram.Bot.Requests.EditInlineMessageTextRequest eitr)
-            {
-                log.Info($"修改内联消息 {eitr.Text}");
-            }
-            else if (args.Request is Telegram.Bot.Requests.EditMessageReplyMarkupRequest emrmr)
-            {
-                log.Info($"修改内联消息");
-            }
+                if (args.Request is Telegram.Bot.Requests.SendMessageRequest smq)
+                {
+                    var name = Tools.Telegram.GetName(smq.ChatId.Identifier);
+                    log.Info($"发送 {name}：", smq.Text);
+                }
+                else if (args.Request is Telegram.Bot.Requests.SendAudioRequest saq)
+                {
+                    var name = Tools.Telegram.GetName(saq.ChatId.Identifier);
+                    log.Info($"发送 {name}：[Audio] {saq.Caption}");
+                }
+                else if (args.Request is Telegram.Bot.Requests.EditMessageTextRequest emtr)
+                {
+                    log.Info($"修改消息 {emtr.Text}");
+                }
+                else if (args.Request is Telegram.Bot.Requests.EditInlineMessageTextRequest eitr)
+                {
+                    log.Info($"修改内联消息 {eitr.Text}");
+                }
+                else if (args.Request is Telegram.Bot.Requests.EditMessageReplyMarkupRequest emrmr)
+                {
+                    log.Info($"修改内联消息");
+                }
+            });
             return ValueTask.CompletedTask;
         }
 
@@ -99,7 +108,7 @@ namespace Otaku16
         private async Task HandleCommand(Update update)
         {
             if (update?.Message is not { } message) return;
-            if (message.Text is not { } content)return;
+            if (message.Text is not { } content) return;
             if (message.From is not { } user) return;
             if (message.Chat.Type != ChatType.Private && !content.Contains(Me.Username!)) return;
             long chatid = message.Chat.Id;
@@ -107,67 +116,73 @@ namespace Otaku16
 
             if (content.StartsWith("/start"))
             {
-               message.FastReply( $"欢迎使用音乐投稿机器人,如需投稿,请直接发送分享链接或音频文件");
+                await message.FastReply($"欢迎使用音乐投稿机器人,如需投稿,请直接发送分享链接或音频文件");
                 return;
             }
             if (content.StartsWith("/chatid"))
             {
-                message.FastReply( $"<code>{chatid}</code>");
+                await message.FastReply($"<code>{chatid}</code>");
                 return;
             }
             if (content.StartsWith("/user"))
             {
-                message.FastReply( $"<code>{from}</code>");
+                await message.FastReply($"<code>{from}</code>");
                 return;
             }
             if (content.StartsWith("/add"))
             {
-                if (!config.IsOwner(from)) return;
+                if (!await Users.HasPermisson(from, Permissions.Owner))
+                {
+                    await message.FastReply("权限不足");
+                    return;
+                }
                 var args = content.Split(' ');
                 if (args.Length >= 2)
                 {
                     long id;
-                    long.TryParse(args[1], out id);
-                    if (config.IsAdmin(id))
+                    if (!long.TryParse(args[1], out id))
                     {
-                        config.Save();
-                        message.FastReply($"{id} 已经是管理员了");
+                        await message.FastReply("无法读取id，请重试");
+                        return;
                     }
+                    if (await Users.HasPermisson(id, Permissions.Admin))
+                        await message.FastReply($"{Tools.Telegram.GetName(id)} 已经是管理员了");
                     else
                     {
-                        config.data.Admins.Add(id);
-                        config.Save();
-                        message.FastReply( $"已添加 {id} 到白名单");
+                        await Users.CopyNew().InsertOrUpdateAsync(new Model.User() { Id = id, Permission = Permissions.Admin });
+                        await message.FastReply($"已赋予 {Tools.Telegram.GetName(id)} 管理员权限");
                     }
                 }
                 return;
             }
             if (content.StartsWith("/del"))
             {
-                if (!config.IsOwner(from)) return;
+                if (!await Users.HasPermisson(from, Permissions.Owner))
+                {
+                    await message.FastReply("权限不足");
+                    return;
+                }
                 var args = content.Split(' ');
                 if (args.Length >= 2)
                 {
                     long id;
                     long.TryParse(args[1], out id);
-                    var text = "";
-                    if (!config.IsAdmin(id)) text = $"{id} 本身就不在白名单内";
+                    if (!await Users.HasPermisson(from, Permissions.Admin))
+                        await message.FastReply($"{Tools.Telegram.GetName(id)} 本身就不是管理员");
                     else
                     {
-                        config.data.Admins.Remove(id);
-                        text = $"已从白名单移除 {id}";
-                        config.Save();
+                        await Users.CopyNew().DeleteAsync(new Model.User() { Id = id });
+                        await message.FastReply($"{Tools.Telegram.GetName(id)} 已不再是管理员");
                     }
-                    message.FastReply(text);
                 }
                 return;
             }
             if (content.StartsWith("/stop"))
             {
                 if (cache.Data.Remove(chatid))
-                    message.FastReply("已清除正在进行的投稿任务");
+                    await message.FastReply("已清除正在进行的投稿任务");
                 else
-                    message.FastReply("暂无正在进行的投稿");
+                    await message.FastReply("暂无正在进行的投稿");
                 cache.Save();
             }
             if (content.StartsWith("/about"))
@@ -185,10 +200,10 @@ namespace Otaku16
             }
             if (content.StartsWith("/list"))
             {
-                if (!config.IsAdmin(from)) return;
+                if (!await Users.HasPermisson(from, Permissions.Aduit)) return;
                 string text = Commands.List.GetPage(0);
                 IReplyMarkup replyMarkup = new ReplyKeyboardRemove();
-                if (history.GetAllUnaduitPosts().Count > 10)
+                if (Posts.Queryable().Where(x => x.Passed == null).Count() > 10)
                 {
                     replyMarkup = new InlineKeyboardMarkup(new[]
                     {
@@ -196,8 +211,43 @@ namespace Otaku16
                     });
                 }
                 if (text == "") text = "当前暂无未审核稿件";
-                await Bot.SendTextMessageAsync(chatid, text, replyToMessageId: message.MessageId, parseMode: ParseMode.Html,replyMarkup:replyMarkup);
+                await Bot.SendTextMessageAsync(chatid, text, replyToMessageId: message.MessageId, parseMode: ParseMode.Html, replyMarkup: replyMarkup);
                 return;
+            }
+            if (content.StartsWith("/echo"))
+            {
+                {
+                    if (!await Users.HasPermisson(from, Permissions.Aduit))
+                    {
+                        log.Warn($"@{update.Message.From?.Username} 正在尝试转发管理员消息，非白名单用户已拒绝。");
+                        return;
+                    }
+                    if (message.ReplyToMessage is not { } origin) return;
+                    var post = Posts.Queryable().Where(x => x.GroupMessageID == origin.MessageId).First();
+                    if (post == null)
+                    {
+                        await message.FastReply($"无法找到 GroupID 为 {origin.MessageId} 的投稿");
+                        return;
+                    }
+                    var text = message.Text[($"/echo@{Me.Username}".Length + 1)..];
+                    await Bot.SendTextMessageAsync(post.UserID, $"来自管理员的消息: {text}");
+                    await message.FastReply($"消息已转发至投稿人");
+                }
+            }
+            if (content.StartsWith("/admins"))
+            {
+                if (!await Users.HasPermisson(from, Permissions.Owner))
+                {
+                    message.FastReply("权限不足");
+                    return;
+                }
+                var text = "";
+                Users.Queryable().Where(x => x.Permission == Permissions.Admin).ToList().ForEach(x =>
+                {
+                    text += $"{Tools.Telegram.GetName(x.Id)}\n";
+                });
+                if (string.IsNullOrEmpty(text)) text = "暂无管理员，使用 /add 添加一个？";
+                await message.FastReply(text);
             }
         }
 
@@ -208,6 +258,7 @@ namespace Otaku16
             if (query.Message is not { } message) return;
             Bot.AnswerCallbackQueryAsync(query.Id);
             var chatid = message.Chat.Id;
+            var from = query.From!.Id;
             if (data.StartsWith("anonymous"))
             {
                 if (!cache.Data.ContainsKey(query.From.Id))
@@ -313,27 +364,27 @@ namespace Otaku16
             }
             if (data.StartsWith("aduit"))
             {
-                if (!config.IsAdmin((update.CallbackQuery.From?.Id) ?? -1)) return;
+                if (!await Users.HasPermisson(from, Permissions.Aduit)) return;
                 var args = data.Split('/');
                 if (args.Length < 3) return;
                 long id = 0;
                 //异常情况处理
                 if (!long.TryParse(args[1], out id))
                 {
-                    message.FastReply($"无法解析稿件 {args[1]}");
+                    await message.FastReply($"无法解析稿件 {args[1]}");
                     return;
                 }
-                if (!history.Data.ContainsKey(id))
+                var post = Posts.Queryable().Where(x => x.Id == id).First();
+                if (post is null)
                 {
-                    message.FastReply($"无法找到稿件 {id}");
+                    message.FastReply($"无法找到稿件 ID:{id}");
                     return;
                 }
-                var post = history.Data[id];
                 //已经通过了的情况
                 if (post.Passed is not null)
                 {
                     await message.RemoveInlineButton();
-                    message.FastReply($"{query.From.GetName()} 这个稿件已经{(post.Passed == true?"通过":"拒绝")}了");
+                    await message.FastReply($"{query.From.GetName()} 这个稿件已经{(post.Passed == true ? "通过" : "拒绝")}了");
                     return;
                 }
 
@@ -344,23 +395,25 @@ namespace Otaku16
                         post = await Pass(post);
                         message.FastAddString($"此稿件由 {query.From.GetName()} 通过");
                         break;
+
                     case "reject":
                         post.Passed = false;
                         await Reject(post);
                         message.FastAddString($"此稿件由 {query.From.GetName()} 拒绝");
                         break;
+
                     case "silentreject":
                         post.Passed = false;
                         message.RemoveInlineButton();
                         message.FastAddString($"此稿件由 {query.From.GetName()} 静默拒绝");
                         break;
+
                     default:
                         log.Warn(id, "非法回调参数", data);
                         break;
                 }
                 //通过或发送：通过消息
-                history.Data[id] = post;
-                history.Save();
+                Posts.Update(post);
                 return;
             }
             if (data.StartsWith("post"))
@@ -380,26 +433,23 @@ namespace Otaku16
                         Message sent;
                         if (post.FileID is { } fileid)
                         {
-                            sent = await Bot.SendAudioAsync(config.data.Telegram.ChannelID, InputFile.FromFileId(fileid), caption: post.ToString());
+                            sent = await Bot.SendAudioAsync(Opt.Telegram.ChannelID, InputFile.FromFileId(fileid), caption: post.ToString());
                         }
                         else
                         {
-                            sent = await Bot.SendTextMessageAsync(config.data.Telegram.ChannelID, post.ToString());
+                            sent = await Bot.SendTextMessageAsync(Opt.Telegram.ChannelID, post.ToString());
                         }
-                        history.Data[post.Timestamp] = new()
-                        {
-                            UserID = user,
-                            Post = post,
-                            GroupMessageID = 0,
-                            Passed = true,
-                            ChannelMessageID = sent.MessageId,
-                        };
-                        history.Save();
+                        post.UserID = user;
+                        post.Passed = true;
+                        post.ChannelMessageID = sent.MessageId;
+                        Posts.CopyNew().Insert(post);
+
                         //随后缓存移除本投稿信息
                         cache.Data.Remove(user);
                         cache.Save();
-                        message.FastReply( $"稿件 {post.Title} 已发布 - {config.data.Telegram.ChannelLink}/{sent.MessageId}");
+                        await message.FastReply($"稿件 {post.Title} 已发布 - {Opt.Telegram.ChannelLink}/{sent.MessageId}");
                         break;
+
                     case "post/aduit":
                         message.FastEdit("稿件将正常审核");
                         await SendForAduit(query.From.Id);
@@ -410,7 +460,7 @@ namespace Otaku16
             {
                 int.TryParse(data.Split('/').Last(), out int page);
                 if (page < 0) return;
-                while (page * 10 > history.GetAllUnaduitPosts().Count)
+                while (page * 10 > Posts.Queryable().Where(x => x.Passed == null).Count())
                 {
                     page--;
                     if (page < 0)
@@ -426,17 +476,18 @@ namespace Otaku16
                     return;
                 }
                 InlineKeyboardMarkup replyMarkup;
-                List<InlineKeyboardButton> buttons = new ();
+                List<InlineKeyboardButton> buttons = new();
                 if (page > 0) buttons.Add(InlineKeyboardButton.WithCallbackData("◀️ Prev Page", $"cmd/list/page/{page - 1}"));
-                if ((page + 1) * 10 < history.GetAllUnaduitPosts().Count) buttons.Add(InlineKeyboardButton.WithCallbackData("▶️ Next Page", $"cmd/list/page/{page + 1}"));
+                if ((page + 1) * 10 < Posts.Queryable().Where(x => x.Passed == null).Count())
+                    buttons.Add(InlineKeyboardButton.WithCallbackData("▶️ Next Page", $"cmd/list/page/{page + 1}"));
                 replyMarkup = new InlineKeyboardMarkup(buttons.ToArray());
-                message.FastEdit("当前未审核的稿件有\n"+body, replyMarkup);
+                message.FastEdit("当前未审核的稿件有\n" + body, replyMarkup);
             }
         }
 
-        private async Task Reject(HistoryTable post)
+        private async Task Reject(Post post)
         {
-            await Bot.SendTextMessageAsync(post.UserID, $"稿件 {post.Post.Title} 已被管理员拒绝");
+            await Bot.SendTextMessageAsync(post.UserID, $"稿件 {post.Title} 已被管理员拒绝");
         }
 
         /// <summary>
@@ -445,20 +496,20 @@ namespace Otaku16
         /// <param name="update"></param>
         /// <param name="post"></param>
         /// <returns></returns>
-        private async Task<HistoryTable> Pass(HistoryTable post)
+        private async Task<Post> Pass(Post post)
         {
             Message? sent = null;
             string text = post.ToString();
-            if (post.Post.FileID is { } fileid)
+            if (post.FileID is { } fileid)
             {
-                sent = await Bot.SendAudioAsync(config.data.Telegram.ChannelID, InputFile.FromFileId(fileid), caption: text);
+                sent = await Bot.SendAudioAsync(Opt.Telegram.ChannelID, InputFile.FromFileId(fileid), caption: text);
             }
             else
             {
-                sent = await Bot.SendTextMessageAsync(config.data.Telegram.ChannelID, text);
+                sent = await Bot.SendTextMessageAsync(Opt.Telegram.ChannelID, text);
             }
             post.ChannelMessageID = sent.MessageId;
-            Bot.SendTextMessageAsync(post.UserID, $"稿件 {post.Post.Title} 已通过 - {config.data.Telegram.ChannelLink}/{post.ChannelMessageID}");
+            Bot.SendTextMessageAsync(post.UserID, $"稿件 {post.Title} 已通过 - {Opt.Telegram.ChannelLink}/{post.ChannelMessageID}");
             //移除审核群的按钮
             return post;
         }
@@ -475,23 +526,24 @@ namespace Otaku16
                 string text = "欢迎使用链接投稿";
                 Post post = NewPost(user);
                 post.Link = content;
-                int id = Netease.GetIdFromUrl(message.Text);
-                if (id != 0)
+                var url = await Network.GetRedirectUrl(content);
+                if (url.Contains("music.163.com"))
                 {
-                    post = await Netease.AutoFill(post, id);
+                    post = await Netease.AutoFill(post, url);
                     text += $"\n当前是网易云链接";
                     text += $"{(post.Title is null ? "" : "\n标题: " + post.Title)}";
                     text += $"{(post.Author is null ? "" : "\n艺术家: " + post.Author)}";
                     text += $"{(post.Album is null ? "" : "\n专辑: " + post.Album)}";
                 }
-                else if (message.Text.StartsWith("https://i.y.qq.com"))
+                else if (url.Contains("y.qq.com"))
                 {
-                    post = QQMusic.AutoFill(post, message.Text);
+                    post = QQMusic.AutoFill(post, url);
                     text += $"\n当前是QQ音乐分享链接";
                     text += $"{(post.Title is null ? "" : "\n标题: " + post.Title)}";
                     text += $"{(post.Author is null ? "" : "\n艺术家: " + post.Author)}";
                     text += $"{(post.Album is null ? "" : "\n专辑: " + post.Album)}";
                 }
+                Debug.WriteLine(post);
                 text += "\n随时可使用 /stop 终止投稿";
                 cache.Data[user.Id] = post;
                 cache.Save();
@@ -503,7 +555,7 @@ namespace Otaku16
             if (!cache.Data.ContainsKey(user.Id) && message.Chat.Type == ChatType.Private)
             {
                 string text = "如需投稿，请直接发送平台链接或音频文件";
-                message.FastReply(text);
+                await message.FastReply(text);
                 return;
             }
             else if (message.Chat.Type == ChatType.Private)
@@ -519,69 +571,53 @@ namespace Otaku16
                     Bot.EditMessageReplyMarkupAsync(message.Chat.Id, message.MessageId - 1);
                 }
                 else if (post.Comment is null)
+                {
                     post.Comment = content;
+                }
                 cache.Data[user.Id] = post;
                 cache.Save();
                 await AskToFillInfo(update);
                 return;
             }
-            //不是私聊 那就是转发消息
-            else if (message.ReplyToMessage is { } origin)
-            {
-                if (!config.IsAdmin((update.Message.From?.Id) ?? -1))
-                {
-                    log.Warn($"@{update.Message.From?.Username} 正在尝试转发管理员消息，非白名单用户已拒绝。");
-                    return;
-                }
-                long id = history.GetIDByMessageID(origin.MessageId);
-                if (id == -1) return;
-                var post = history.Data[id];
-                Bot.SendTextMessageAsync(post.UserID, $"来自管理员的消息: {message.Text}");
-                message.FastReply( $"消息已转发至投稿人");
-            }
         }
 
         private async Task HandleAudio(Update update)
         {
-            if (update.Message is not { } message)return;
+            if (update.Message is not { } message) return;
             if (update.Message.Audio is not { } audio) return;
             if (update.Message.From is not { } user) return;
-            
+
             //回复的式群组里的音频文件，那么就是补充文件投稿
             if (message.Chat.Type != ChatType.Private && message.ReplyToMessage is { } replyMessage)
             {
-                if (!config.IsAdmin((message.From?.Id) ?? -1))
+                if (!await Users.HasPermisson((message.From?.Id) ?? -1, Permissions.Aduit))
                 {
                     log.Warn($"@{message.From?.Username} 正在尝试补充投稿音频，非白名单用户已拒绝。");
                     return;
                 }
-                //拿到投稿id
-                var id = history.GetIDByMessageID(replyMessage.MessageId);
-                if (id == -1) return;
-                //通过id拿到稿件信息
-                var post = history.Data[id];
+                //通过群内消息id拿到稿件信息
+                var post = await Posts.Queryable().Where(x => x.GroupMessageID == replyMessage.MessageId).FirstAsync();
                 //已通过or拒绝
                 if (post.Passed != null)
                 {
-                    message.FastReply( $"稿件 <a href=\"{config.data.Telegram.GroupLink}/{post.ChannelMessageID}\">{post.Post.Title}</a> 已经 {(post.Passed == true ? "通过" : "拒绝")} 了");
+                    await message.FastReply($"稿件 <a href=\"{Opt.Telegram.GroupLink}/{post.GroupMessageID}\">{post.Title}</a> 已经{(post.Passed == true ? "通过" : "拒绝")}了");
                     return;
                 }
-                if (post.Post.FileID != null)
+                if (post.FileID != null)
                 {
-                    message.FastReply($"稿件 {post.Post.Title} 已经包含了音频文件");
+                    await message.FastReply($"稿件 {post.Title} 已经包含了音频文件");
                     return;
                 }
                 //补充稿件的文件id
-                post.Post.FileID = audio.FileId;
+                post.FileID = audio.FileId;
                 //更新稿件状态
                 post.Passed = true;
                 //移除审核按钮
-                Bot.EditMessageReplyMarkupAsync(config.data.Telegram.GroupID, post.GroupMessageID);
+                Bot.EditMessageReplyMarkupAsync(Opt.Telegram.GroupID, post.GroupMessageID ?? 0);
                 //通过稿件
                 post = await Pass(post);
-                Bot.SendTextMessageAsync(message.Chat.Id,$"{user.GetName()} 使用音频文件通过了稿件",replyToMessageId:post.GroupMessageID);
-                history.Data[id] = post;
-                history.Save();
+                Bot.SendTextMessageAsync(message.Chat.Id, $"{user.GetName()} 使用音频文件通过了稿件", replyToMessageId: post.GroupMessageID);
+                Posts.CopyNew().Update(post);
                 return;
             }
             //私聊里的音频就是新投稿
@@ -628,22 +664,19 @@ namespace Otaku16
             }
         }
 
-        private Post NewPost(User user)
+        private Post NewPost(Telegram.Bot.Types.User user)
         {
             //初始化投稿信息
             return new()
             {
-                Title = null,
-                Author = null,
-                FileID = null,
+                UserID = user.Id,
                 UserName = user.GetName(),
-                Album = null,
-                Link = null,
                 Timestamp = TimeStamp.GetNow(),
             };
         }
 
         //查询未补全的信息，并询问
+        //SQL DONE
         private async Task AskToFillInfo(Update update)
         {
             var msg = update.Message;
@@ -673,7 +706,7 @@ namespace Otaku16
             }
             else if (post.Tag is null)
             {
-                if (config.IsOwner(user))
+                if (await Users.HasPermisson(user, Permissions.Owner))
                 {
                     inline = new InlineKeyboardMarkup(new[]
                     {
@@ -722,7 +755,7 @@ namespace Otaku16
             //当填的都填完了
             else
             {
-                if (config.IsOwner(user))
+                if (await Users.HasPermisson(user, Permissions.Owner))
                 {
                     text = "您拥有直接投稿权限，是否直接将稿件发布？";
                     text += $"{(post.FileID is null ? "\n提示：当前无音频文件" : "")}";
@@ -749,32 +782,33 @@ namespace Otaku16
             Bot.SendTextMessageAsync(user, text, replyMarkup: inline);
         }
 
+        //SQL DONE
         private async Task SendForAduit(long user)
         {
             Message? sent = null;
-            var post = cache.Data[user];
-            IReplyMarkup inline =  new InlineKeyboardMarkup(new[]
+            Post? post = cache.Data[user];
+            Posts.Insert(post);
+            post = Posts.Queryable().Where(x => x.UserID == user).ToList().Last();
+            IReplyMarkup inline = new InlineKeyboardMarkup(new[]
             {
                 new[]
                 {
-                    InlineKeyboardButton.WithCallbackData("✅通过",$"aduit/{post.Timestamp}/pass"),
-                    
+                    InlineKeyboardButton.WithCallbackData("✅通过",$"aduit/{post.Id}/pass"),
                 },
                 new[]
                 {
-                    InlineKeyboardButton.WithCallbackData("❌拒绝",$"aduit/{post.Timestamp}/reject"),
-                    InlineKeyboardButton.WithCallbackData("🔕静默拒绝",$"aduit/{post.Timestamp}/silentreject"),
+                    InlineKeyboardButton.WithCallbackData("❌拒绝",$"aduit/{post.Id}/reject"),
+                    InlineKeyboardButton.WithCallbackData("🔕静默拒绝",$"aduit/{post.Id}/silentreject"),
                 }
             });
             if (post.Link is not null)
             {
-                
-                sent = await Bot.SendTextMessageAsync(config.data.Telegram.GroupID, post.ToString(), replyMarkup: inline);
+                sent = await Bot.SendTextMessageAsync(Opt.Telegram.GroupID, post.ToString(), replyMarkup: inline);
             }
             else if (post.FileID is not null)
             {
                 sent = await Bot.SendAudioAsync(
-                    chatId: config.data.Telegram.GroupID,
+                    chatId: Opt.Telegram.GroupID,
                      InputFile.FromFileId(post.FileID),
                     replyMarkup: inline,
                     caption: post.ToString()
@@ -784,18 +818,8 @@ namespace Otaku16
             {
                 log.Warn("无法转发消息");
             }
-
-            //保存到历史投稿
-            history.Data[post.Timestamp] = new()
-            {
-                UserID = user,
-                Post = post,
-                GroupMessageID = (sent?.MessageId) ?? 0,
-                Passed = null,
-                ChannelMessageID = 0,
-            };
-            history.Save();
-            //随后缓存移除本投稿信息
+            post.GroupMessageID = sent!.MessageId;
+            Posts.Update(post);
             cache.Data.Remove(user);
             cache.Save();
         }
@@ -805,15 +829,16 @@ namespace Otaku16
         //处理TGAPI错误
         private Task HandlePollingErrorAsync(ITelegramBotClient botClient, Exception exception, CancellationToken cancellationToken)
         {
-            var ErrorMessage = exception switch
+            string ErrorMessage = exception.Message + "\n" + new StackTrace(exception);
+            while (exception.InnerException != null)
             {
-                ApiRequestException apiRequestException
-                    => $"API Error:{apiRequestException.ErrorCode} - {apiRequestException.Message}",
-                _ => exception.ToString()
-            };
-            Debugger.Break();
+                exception = exception.InnerException;
+                ErrorMessage += "\nInner:" + exception.Message + "\n" + new StackTrace(exception);
+            }
+
+            //Debugger.Break();
             log.Error(ErrorMessage);
-            Hosting.Stop();
+            //Hosting.Stop();
             return Task.CompletedTask;
         }
     }

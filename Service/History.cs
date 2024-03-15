@@ -1,6 +1,6 @@
 ﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using Otaku16.Data;
+using Otaku16.Model;
 using System.Diagnostics.CodeAnalysis;
 using System.Xml.Linq;
 
