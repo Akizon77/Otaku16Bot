@@ -33,20 +33,27 @@ namespace Otaku16.Model
         public string? Link { get; set; }
         [SugarColumn(IsNullable = true)]
         public string? Tag { get; set; }
-        [SugarColumn(IsNullable = true)]
+        [SugarColumn(IsNullable = true,Length = -1)]
         public string? Comment { get; set; }
         public long Timestamp { get; set; }
         [SugarColumn(IsNullable = true)]
         public bool? Anonymous { get; set; }
         public override string ToString()
         {
-            return $"投稿人: {(Anonymous ?? false ? "匿名" : UserName)}\n" +
-            $"歌曲名: {Title}\n" +
-            $"艺术家名: {Author}\n" +
-            $"专辑: {Album}\n" +
-            $"Tag: #{Tag}\n" +
-            $"附言: {Comment}" +
-            $"{(Link is null ? "" : "\n链接: " + Link)}"; ;
+            var name = Tools.Telegram.GetName(UserID);
+            long userid = 0;
+            var success = long.TryParse(name,out userid);
+            if (success)
+            {
+                name = UserName;
+            }
+            return $"投稿人: {(Anonymous ?? false ? "匿名" : name)}\n" +
+            $"歌曲名: {Title?.HTMLEscape()}\n" +
+            $"艺术家名: {Author?.HTMLEscape()}\n" +
+            $"专辑: {Album?.HTMLEscape()}\n" +
+            $"Tag: #{Tag?.HTMLEscape()}\n" +
+            $"附言: {Comment?.HTMLEscape()}" +
+            $"{(Link is null ? "" : "\n链接: " + $"<a href=\"{Link}\">[跳转]</a>")}"; ;
         }
     }
 }

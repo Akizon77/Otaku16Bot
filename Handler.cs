@@ -2,6 +2,7 @@
 using Otaku16.Repos;
 using Otaku16.Service;
 using Otaku16.Tools;
+using System;
 using System.Diagnostics;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
@@ -45,7 +46,7 @@ namespace Otaku16
                 }
             };
             //开始接受消息
-            Bot.StartReceiving(updateHandler: HandleUpdateAsync, pollingErrorHandler: HandlePollingErrorAsync, receiverOptions: receiverOptions, cancellationToken: cts.Token);
+            Bot.StartReceiving(updateHandler: HandleUpdateAsyncF, pollingErrorHandler: HandlePollingErrorAsync, receiverOptions: receiverOptions, cancellationToken: cts.Token);
             Bot.OnMakingApiRequest += OnSendReq;
         }
 
@@ -77,6 +78,27 @@ namespace Otaku16
                 }
             });
             return ValueTask.CompletedTask;
+        }
+
+        private async Task HandleUpdateAsyncF(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
+        {
+            try
+            {
+                await HandleUpdateAsync(botClient, update, cancellationToken);
+            }
+            catch (Exception exception)
+            {
+                string ErrorMessage = exception.Message + "\n" + new StackTrace(exception);
+                while (exception.InnerException != null)
+                {
+                    exception = exception.InnerException;
+                    ErrorMessage += "\nInner:" + exception.Message + "\n" + new StackTrace(exception);
+                }
+
+                //Debugger.Break();
+                log.Error(ErrorMessage);
+                //Hosting.Stop();
+            }
         }
 
         private async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
@@ -127,6 +149,15 @@ namespace Otaku16
             if (content.StartsWith("/user"))
             {
                 await message.FastReply($"<code>{from}</code>");
+                return;
+            }
+            if (content.StartsWith("/login"))
+            {
+                var inline = new InlineKeyboardMarkup(new InlineKeyboardButton[]
+                {
+                    InlineKeyboardButton.WithLoginUrl("登录到Web",new (){Url = "https://akz.moe/dashboard/"}),
+                }) ;
+                await Bot.SendTextMessageAsync(message.Chat.Id, $"点击下面的按钮来登录到Web页面",replyMarkup:inline, parseMode: ParseMode.Html);
                 return;
             }
             if (content.StartsWith("/add"))
@@ -202,16 +233,12 @@ namespace Otaku16
             {
                 if (!await Users.HasPermisson(from, Permissions.Aduit)) return;
                 string text = Commands.List.GetPage(0);
-                IReplyMarkup replyMarkup = new ReplyKeyboardRemove();
+                List<InlineKeyboardButton> buttons = new ();
+                buttons.Add(InlineKeyboardButton.WithCallbackData("🔄 Refresh", "cmd/list/page/0"));
                 if (Posts.Queryable().Where(x => x.Passed == null).Count() > 10)
-                {
-                    replyMarkup = new InlineKeyboardMarkup(new[]
-                    {
-                        InlineKeyboardButton.WithCallbackData("▶️ Next Page","cmd/list/page/1"),
-                    });
-                }
+                    buttons.Add(InlineKeyboardButton.WithCallbackData("▶️ Next Page", "cmd/list/page/1"));
                 if (text == "") text = "当前暂无未审核稿件";
-                await Bot.SendTextMessageAsync(chatid, text, replyToMessageId: message.MessageId, parseMode: ParseMode.Html, replyMarkup: replyMarkup);
+                await Bot.SendTextMessageAsync(chatid, text, replyToMessageId: message.MessageId, parseMode: ParseMode.Html, replyMarkup: new InlineKeyboardMarkup(buttons.ToArray()) );
                 return;
             }
             if (content.StartsWith("/echo"))
@@ -229,9 +256,17 @@ namespace Otaku16
                         await message.FastReply($"无法找到 GroupID 为 {origin.MessageId} 的投稿");
                         return;
                     }
-                    var text = message.Text[($"/echo@{Me.Username}".Length + 1)..];
-                    await Bot.SendTextMessageAsync(post.UserID, $"来自管理员的消息: {text}");
-                    await message.FastReply($"消息已转发至投稿人");
+                    if (message.Text == $"/echo@{Me.Username}" )
+                    {
+                        message.FastReply("转发的消息不能为空！");
+                    }
+                    else
+                    {
+                        var text = message.Text[($"/echo@{Me.Username}".Length)..];
+                        await Bot.SendTextMessageAsync(post.UserID, $"来自管理员的消息: {text}",parseMode: ParseMode.Html);
+                        await message.FastReply($"消息已转发至投稿人");
+                    }
+
                 }
             }
             if (content.StartsWith("/admins"))
@@ -263,7 +298,7 @@ namespace Otaku16
             {
                 if (!cache.Data.ContainsKey(query.From.Id))
                 {
-                    message.FastEdit("此投稿已超时或取消");
+                    await message.FastEdit("此投稿已超时或取消");
                     return;
                 }
                 var post = cache.Data[query.From.Id];
@@ -283,7 +318,7 @@ namespace Otaku16
                 }
                 cache.Data[query.From.Id] = post;
                 cache.Save();
-                message.FastEdit($"匿名状态当前已选择：{((post.Anonymous ?? false) ? "匿名" : "保留来源")}");
+                await message.FastEdit($"匿名状态当前已选择：{((post.Anonymous ?? false) ? "匿名" : "保留来源")}");
                 await AskToFillInfo(update);
                 return;
             }
@@ -291,7 +326,7 @@ namespace Otaku16
             {
                 if (!cache.Data.ContainsKey(query.From.Id))
                 {
-                    message.FastEdit("此投稿已超时或取消");
+                    await message.FastEdit("此投稿已超时或取消");
                     return;
                 }
                 var post = cache.Data[query.From.Id];
@@ -307,7 +342,7 @@ namespace Otaku16
 
                     case "edit/album/null":
                         post.Album = "单曲";
-                        message.FastEdit("该曲目是单曲，无专辑");
+                        await message.FastEdit("该曲目是单曲，无专辑");
                         break;
 
                     default:
@@ -323,7 +358,7 @@ namespace Otaku16
             {
                 if (!cache.Data.ContainsKey(query.From.Id))
                 {
-                    message.FastEdit("此投稿已超时或取消");
+                    await message.FastEdit("此投稿已超时或取消");
                     return;
                 }
                 var post = cache.Data[query.From.Id];
@@ -351,7 +386,7 @@ namespace Otaku16
                 }
                 cache.Data[query.From.Id] = post;
                 cache.Save();
-                message.FastEdit($"类型当前已选择：{post.Tag}");
+                await message.FastEdit($"类型当前已选择：{post.Tag}");
                 await AskToFillInfo(update);
                 return;
             }
@@ -421,23 +456,23 @@ namespace Otaku16
                 var user = query.From.Id;
                 if (!cache.Data.ContainsKey(user))
                 {
-                    message.FastEdit("ERR:此稿件已被处理或不存在");
+                    await message.FastEdit("ERR:此稿件已被处理或不存在");
                     return;
                 }
                 var post = cache.Data[query.From.Id];
                 switch (data)
                 {
                     case "post/pubdirect":
-                        message.FastEdit("稿件将直接发布");
+                        await message.FastEdit("稿件将直接发布");
 
                         Message sent;
                         if (post.FileID is { } fileid)
                         {
-                            sent = await Bot.SendAudioAsync(Opt.Telegram.ChannelID, InputFile.FromFileId(fileid), caption: post.ToString());
+                            sent = await Bot.SendAudioAsync(Opt.Telegram.ChannelID, InputFile.FromFileId(fileid), caption: post.ToString(),parseMode: ParseMode.Html);
                         }
                         else
                         {
-                            sent = await Bot.SendTextMessageAsync(Opt.Telegram.ChannelID, post.ToString());
+                            sent = await Bot.SendTextMessageAsync(Opt.Telegram.ChannelID, post.ToString(), parseMode: ParseMode.Html);
                         }
                         post.UserID = user;
                         post.Passed = true;
@@ -451,7 +486,7 @@ namespace Otaku16
                         break;
 
                     case "post/aduit":
-                        message.FastEdit("稿件将正常审核");
+                        await message.FastEdit("稿件将正常审核");
                         await SendForAduit(query.From.Id);
                         break;
                 }
@@ -460,34 +495,34 @@ namespace Otaku16
             {
                 int.TryParse(data.Split('/').Last(), out int page);
                 if (page < 0) return;
-                while (page * 10 > Posts.Queryable().Where(x => x.Passed == null).Count())
-                {
-                    page--;
-                    if (page < 0)
-                    {
-                        message.FastEdit("暂无未审核消息");
-                        return;
-                    }
-                }
                 var body = Commands.List.GetPage(page);
                 if (body == "")
                 {
-                    message.FastEdit("暂无未审核消息");
+                    await message.FastEdit("暂无未审核消息", InlineKeyboardButton.WithCallbackData("🔄 Refresh", "cmd/list/page/0"));
                     return;
                 }
                 InlineKeyboardMarkup replyMarkup;
                 List<InlineKeyboardButton> buttons = new();
-                if (page > 0) buttons.Add(InlineKeyboardButton.WithCallbackData("◀️ Prev Page", $"cmd/list/page/{page - 1}"));
+                if (page > 0) 
+                    buttons.Add(InlineKeyboardButton.WithCallbackData("◀️ Prev Page", $"cmd/list/page/{page - 1}"));
+                buttons.Add(InlineKeyboardButton.WithCallbackData("🔄 Refresh", "cmd/list/page/0"));
                 if ((page + 1) * 10 < Posts.Queryable().Where(x => x.Passed == null).Count())
                     buttons.Add(InlineKeyboardButton.WithCallbackData("▶️ Next Page", $"cmd/list/page/{page + 1}"));
                 replyMarkup = new InlineKeyboardMarkup(buttons.ToArray());
-                message.FastEdit("当前未审核的稿件有\n" + body, replyMarkup);
+                await message.FastEdit("当前未审核的稿件有\n" + body, replyMarkup);
             }
         }
 
         private async Task Reject(Post post)
         {
-            await Bot.SendTextMessageAsync(post.UserID, $"稿件 {post.Title} 已被管理员拒绝");
+            try
+            {
+                await Bot.SendTextMessageAsync(post.UserID, $"稿件 {post.Title} 已被管理员拒绝",parseMode: ParseMode.Html);
+            }
+            catch 
+            {
+            }
+            
         }
 
         /// <summary>
@@ -496,20 +531,27 @@ namespace Otaku16
         /// <param name="update"></param>
         /// <param name="post"></param>
         /// <returns></returns>
-        private async Task<Post> Pass(Post post)
+        public async Task<Post> Pass(Post post)
         {
             Message? sent = null;
             string text = post.ToString();
             if (post.FileID is { } fileid)
             {
-                sent = await Bot.SendAudioAsync(Opt.Telegram.ChannelID, InputFile.FromFileId(fileid), caption: text);
+                sent = await Bot.SendAudioAsync(Opt.Telegram.ChannelID, InputFile.FromFileId(fileid), caption: text, parseMode: ParseMode.Html);
             }
             else
             {
-                sent = await Bot.SendTextMessageAsync(Opt.Telegram.ChannelID, text);
+                sent = await Bot.SendTextMessageAsync(Opt.Telegram.ChannelID, text, parseMode: ParseMode.Html);
             }
             post.ChannelMessageID = sent.MessageId;
-            Bot.SendTextMessageAsync(post.UserID, $"稿件 {post.Title} 已通过 - {Opt.Telegram.ChannelLink}/{post.ChannelMessageID}");
+            try
+            {
+                Bot.SendTextMessageAsync(post.UserID, $"稿件 {post.Title} 已通过 - {Opt.Telegram.ChannelLink}/{post.ChannelMessageID}", parseMode: ParseMode.Html);
+            }
+            catch
+            {
+            }
+            
             //移除审核群的按钮
             return post;
         }
@@ -531,17 +573,17 @@ namespace Otaku16
                 {
                     post = await Netease.AutoFill(post, url);
                     text += $"\n当前是网易云链接";
-                    text += $"{(post.Title is null ? "" : "\n标题: " + post.Title)}";
-                    text += $"{(post.Author is null ? "" : "\n艺术家: " + post.Author)}";
-                    text += $"{(post.Album is null ? "" : "\n专辑: " + post.Album)}";
+                    text += $"{(post.Title is null ? "" : "\n标题: " + post.Title.HTMLEscape())}";
+                    text += $"{(post.Author is null ? "" : "\n艺术家: " + post.Author.HTMLEscape())}";
+                    text += $"{(post.Album is null ? "" : "\n专辑: " + post.Album.HTMLEscape())}";
                 }
                 else if (url.Contains("y.qq.com"))
                 {
                     post = QQMusic.AutoFill(post, url);
                     text += $"\n当前是QQ音乐分享链接";
-                    text += $"{(post.Title is null ? "" : "\n标题: " + post.Title)}";
-                    text += $"{(post.Author is null ? "" : "\n艺术家: " + post.Author)}";
-                    text += $"{(post.Album is null ? "" : "\n专辑: " + post.Album)}";
+                    text += $"{(post.Title is null ? "" : "\n标题: " + post.Title.HTMLEscape())}";
+                    text += $"{(post.Author is null ? "" : "\n艺术家: " + post.Author.HTMLEscape())}";
+                    text += $"{(post.Album is null ? "" : "\n专辑: " + post.Album.HTMLEscape())}";
                 }
                 Debug.WriteLine(post);
                 text += "\n随时可使用 /stop 终止投稿";
@@ -568,7 +610,7 @@ namespace Otaku16
                 else if (post.Album is null)
                 {
                     post.Album = content;
-                    Bot.EditMessageReplyMarkupAsync(message.Chat.Id, message.MessageId - 1);
+                    await Bot.EditMessageReplyMarkupAsync(message.Chat.Id, message.MessageId - 1);
                 }
                 else if (post.Comment is null)
                 {
@@ -613,10 +655,10 @@ namespace Otaku16
                 //更新稿件状态
                 post.Passed = true;
                 //移除审核按钮
-                Bot.EditMessageReplyMarkupAsync(Opt.Telegram.GroupID, post.GroupMessageID ?? 0);
+                await Bot.EditMessageReplyMarkupAsync(Opt.Telegram.GroupID, post.GroupMessageID ?? 0);
                 //通过稿件
                 post = await Pass(post);
-                Bot.SendTextMessageAsync(message.Chat.Id, $"{user.GetName()} 使用音频文件通过了稿件", replyToMessageId: post.GroupMessageID);
+                await Bot.SendTextMessageAsync(message.Chat.Id, $"{user.GetName()} 使用音频文件通过了稿件", replyToMessageId: post.GroupMessageID, parseMode: ParseMode.Html);
                 Posts.CopyNew().Update(post);
                 return;
             }
@@ -670,7 +712,7 @@ namespace Otaku16
             return new()
             {
                 UserID = user.Id,
-                UserName = user.GetName(),
+                UserName = user.GetName(false),
                 Timestamp = TimeStamp.GetNow(),
             };
         }
@@ -767,11 +809,11 @@ namespace Otaku16
                             InlineKeyboardButton.WithCallbackData("❌否","post/aduit"),
                         }
                     });
-                    Bot.SendTextMessageAsync(user, text, replyMarkup: inline);
+                    Bot.SendTextMessageAsync(user, text, replyMarkup: inline, parseMode: ParseMode.Html);
                     return;
                 }
                 text = "感谢支持，审核结果将在稍后通知";
-                await Bot.SendTextMessageAsync(user, text);
+                await Bot.SendTextMessageAsync(user, text, parseMode: ParseMode.Html);
                 text = post.ToString();
                 //投稿完成，处理信息
 
@@ -779,11 +821,11 @@ namespace Otaku16
                 await SendForAduit(user);
                 return;
             };
-            Bot.SendTextMessageAsync(user, text, replyMarkup: inline);
+            Bot.SendTextMessageAsync(user, text, replyMarkup: inline, parseMode: ParseMode.Html);
         }
 
         //SQL DONE
-        private async Task SendForAduit(long user)
+        public async Task SendForAduit(long user)
         {
             Message? sent = null;
             Post? post = cache.Data[user];
@@ -803,7 +845,7 @@ namespace Otaku16
             });
             if (post.Link is not null)
             {
-                sent = await Bot.SendTextMessageAsync(Opt.Telegram.GroupID, post.ToString(), replyMarkup: inline);
+                sent = await Bot.SendTextMessageAsync(Opt.Telegram.GroupID, post.ToString(), replyMarkup: inline, parseMode: ParseMode.Html);
             }
             else if (post.FileID is not null)
             {
@@ -811,7 +853,8 @@ namespace Otaku16
                     chatId: Opt.Telegram.GroupID,
                      InputFile.FromFileId(post.FileID),
                     replyMarkup: inline,
-                    caption: post.ToString()
+                    caption: post.ToString(),
+                    parseMode: ParseMode.Html
                     );
             }
             else
@@ -827,19 +870,19 @@ namespace Otaku16
         //新消息的处理
 
         //处理TGAPI错误
-        private Task HandlePollingErrorAsync(ITelegramBotClient botClient, Exception exception, CancellationToken cancellationToken)
+        private async Task HandlePollingErrorAsync(ITelegramBotClient botClient, Exception exception, CancellationToken cancellationToken)
         {
-            string ErrorMessage = exception.Message + "\n" + new StackTrace(exception);
-            while (exception.InnerException != null)
-            {
-                exception = exception.InnerException;
-                ErrorMessage += "\nInner:" + exception.Message + "\n" + new StackTrace(exception);
-            }
-
-            //Debugger.Break();
-            log.Error(ErrorMessage);
-            //Hosting.Stop();
-            return Task.CompletedTask;
+            //string ErrorMessage = exception.Message + "\n" + new StackTrace(exception);
+            //while (exception.InnerException != null)
+            //{
+            //    exception = exception.InnerException;
+            //    ErrorMessage += "\nInner:" + exception.Message + "\n" + new StackTrace(exception);
+            //}
+            //
+            ////Debugger.Break();
+            //log.Error(ErrorMessage);
+            ////Hosting.Stop();
+            await Task.CompletedTask;
         }
     }
 }

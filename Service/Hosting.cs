@@ -52,17 +52,17 @@ namespace Otaku16.Service
                     };
                     return new SqlSugarClient(cf, db =>
                     {
-                        var logger = new Logger("SQL");
-                        db.Aop.OnLogExecuting = (sql, pars) =>
-                        {
-                            //var param = db.GetConnectionScope(0).Utilities.SerializeObject(pars.ToDictionary(it => it.ParameterName, it => it.Value));
-                            foreach (var par in pars)
-                            {
-                                sql = sql.Replace(par.ParameterName, par?.Value?.ToString() ?? "NULL");
-                            }
-                            if (db.Ado.SqlExecutionTime.TotalMilliseconds >= 0)
-                                logger.Info($"执行时间: {db.Ado.SqlExecutionTime.TotalMilliseconds} ms | {sql}");
-                        };
+                        //var logger = new Logger("SQL");
+                        //db.Aop.OnLogExecuting = (sql, pars) =>
+                        //{
+                        //    //var param = db.GetConnectionScope(0).Utilities.SerializeObject(pars.ToDictionary(it => it.ParameterName, it => it.Value));
+                        //    foreach (var par in pars)
+                        //    {
+                        //        sql = sql.Replace(par.ParameterName, par?.Value?.ToString() ?? "NULL");
+                        //    }
+                        //    if (db.Ado.SqlExecutionTime.TotalMilliseconds >= 0)
+                        //        logger.Info($"执行时间: {db.Ado.SqlExecutionTime.TotalMilliseconds} ms | {sql}");
+                        //};
                         db.Aop.OnError = (e) => Console.WriteLine("执行SQL出错：" + e.ToString());
                     });
                 });
@@ -80,6 +80,8 @@ namespace Otaku16.Service
         }
         public static void Start()
         {
+            GetService<UserRepo>().InitHeader();
+            GetService<PostRepo>().InitHeader();
             _host.Start();
         }
         public static void Stop()

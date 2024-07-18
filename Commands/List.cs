@@ -13,8 +13,8 @@ namespace Otaku16.Commands
     {
         private static Options Opt => Hosting.GetService<Options>();
         private static PostRepo Posts => Hosting.GetService<PostRepo>();
-        
-                /// <summary>
+
+        /// <summary>
         /// 获取指定页面的帖子链接文本
         /// </summary>
         /// <param name="page">要获取的页面编号</param>
@@ -25,13 +25,14 @@ namespace Otaku16.Commands
             var posts = Posts.Queryable().Where(x => x.Passed == null).ToList();
             string text = "";
             int i = 1;
+            if (posts.Count < page * 10) page = 0;
             // 遍历所有帖子，将属于指定页面范围的帖子链接添加到文本中
             posts.ForEach(x =>
             {
                 if (page * 10 < i && i <= (page + 1) * 10)
                 {
                     // 如果帖子在指定的页面范围内，将其链接以特定格式添加到文本中
-                    text += $"<a href=\"{Opt.Telegram.GroupLink}/{x.GroupMessageID}\">{i}.{x.Title}</a>\n";
+                    text += $"<a href=\"{Opt.Telegram.GroupLink}/{x.GroupMessageID}\">{i}.{x.Title?.HTMLEscape()}</a>\n";
                 }
                 i++;
             });
